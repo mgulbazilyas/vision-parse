@@ -1,6 +1,7 @@
 from typing import Dict
 
 SUPPORTED_MODELS: Dict[str, str] = {
+    'minicpm-v:latest': 'ollama',
     "llama3.2-vision:11b": "ollama",
     "llama3.2-vision:70b": "ollama",
     "llava:13b": "ollama",

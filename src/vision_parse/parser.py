@@ -49,7 +49,7 @@ class VisionParser:
         ollama_config: Optional[Dict] = None,
         openai_config: Optional[Dict] = None,
         gemini_config: Optional[Dict] = None,
-        image_mode: Literal["url", "base64", None] = None,
+        image_mode: Literal["url", "base64", "path", None] = None,
         custom_prompt: Optional[str] = None,
         detailed_extraction: bool = False,
         extraction_complexity: bool = False,  # Deprecated Parameter
@@ -104,7 +104,9 @@ class VisionParser:
         return matrix
 
     async def _convert_page(self, page: fitz.Page, page_number: int) -> str:
-        """Convert a single PDF page into base64-encoded PNG and extract markdown formatted text."""
+        """Convert a single PDF page and extract markdown formatted text."""
+        pix = None
+        image_path = None
         try:
             matrix = self._calculate_matrix(page)
 
@@ -116,13 +118,30 @@ class VisionParser:
                 annots=self.page_config.include_annotations,
             )
 
-            # Convert image to base64 for LLM processing
-            base64_encoded = base64.b64encode(pix.tobytes("png")).decode("utf-8")
-            return await self.llm.generate_markdown(base64_encoded, pix, page_number)
+            # Handle different image modes
+            if self.llm.image_mode == "path":
+                # Save image to file and use the path
+                import os
+                from pathlib import Path
+                
+                # Create a directory for temporary images if it doesn't exist
+                temp_dir = Path("temp_images")
+                os.makedirs(temp_dir, exist_ok=True)
+                
+                # Save the image to a file
+                image_path = str(temp_dir / f"page_{page_number + 1}.png")
+                pix.save(image_path)
+                
+                # Pass the file path to the LLM
+                return await self.llm.generate_markdown(image_path, pix, page_number)
+            else:
+                # Convert image to base64 for LLM processing
+                base64_encoded = base64.b64encode(pix.tobytes("png")).decode("utf-8")
+                return await self.llm.generate_markdown(base64_encoded, pix, page_number)
 
         except Exception as e:
             raise VisionParserError(
-                f"Failed to convert page {page_number + 1} to base64-encoded PNG: {str(e)}"
+                f"Failed to convert page {page_number + 1}: {str(e)}"
             )
         finally:
             # Clean up pixmap to free memory

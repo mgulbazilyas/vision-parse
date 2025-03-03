@@ -20,6 +20,7 @@ class ImageExtractionError(BaseException):
 class ImageData:
     image_url: str  # URL path for extracted images
     base64_encoded: str | None  # Base64 string if image_mode is base64, None otherwise
+    file_path: str | None = None  # File path if image_mode is path, None otherwise
     _lock: ClassVar[Lock] = Lock()  # Lock for thread safety
 
     @staticmethod
@@ -67,7 +68,7 @@ class ImageData:
     def extract_images(
         cls,
         pix: fitz.Pixmap,
-        image_mode: Literal["url", "base64", None],
+        image_mode: Literal["url", "base64", "path", None],
         page_number: int,
         min_dimensions: tuple = (100, 100),
     ) -> List["ImageData"]:
@@ -108,23 +109,32 @@ class ImageData:
 
                     if cls._check_region_validity(region, contour, (w, h)):
                         # Encode image based on mode
+                        image_url = f"image_{page_number+1}_{idx}.png"
+                        
                         if image_mode == "url":
-                            image_url = f"image_{page_number+1}_{idx}.png"
-
                             if not cv2.imwrite(image_url, region):
                                 continue
 
                             idx += 1
-
                             extracted_images.append(
                                 ImageData(
                                     image_url=image_url,
                                     base64_encoded=None,
                                 )
                             )
+                        elif image_mode == "path":
+                            if not cv2.imwrite(image_url, region):
+                                continue
+                                
+                            idx += 1
+                            extracted_images.append(
+                                ImageData(
+                                    image_url=image_url,
+                                    base64_encoded=None,
+                                    file_path=image_url,
+                                )
+                            )
                         else:  # base64 mode
-                            image_url = f"image_{page_number+1}_{idx}.png"
-
                             img_bytes = cv2.imencode(".png", region)[1].tobytes()
                             if not img_bytes:
                                 continue

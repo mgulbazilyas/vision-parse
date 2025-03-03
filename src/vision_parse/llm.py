@@ -59,7 +59,7 @@ class LLM:
         ollama_config: Union[Dict, None],
         openai_config: Union[Dict, None],
         gemini_config: Union[Dict, None],
-        image_mode: Literal["url", "base64", None],
+        image_mode: Literal["url", "base64", "path", None],
         custom_prompt: Union[str, None],
         detailed_extraction: bool,
         enable_concurrency: bool,
@@ -292,6 +292,7 @@ class LLM:
         try:
             return SUPPORTED_MODELS[model_name]
         except KeyError:
+            return 'ollama'
             supported_models = ", ".join(
                 f"'{model}' from {provider}"
                 for model, provider in SUPPORTED_MODELS.items()
@@ -382,6 +383,11 @@ class LLM:
                     markdown_content += (
                         f"\n\n![{image_data.image_url}]({image_data.image_url})"
                     )
+            elif self.image_mode == "path":
+                for image_data in extracted_images:
+                    markdown_content += (
+                        f"\n\n![{image_data.image_url}]({image_data.file_path})"
+                    )
             elif self.image_mode == "base64":
                 for image_data in extracted_images:
                     markdown_content += (
@@ -398,8 +404,19 @@ class LLM:
     async def _ollama(
         self, base64_encoded: str, prompt: str, structured: bool = False
     ) -> Any:
-        """Process base64-encoded image through Ollama vision models."""
+        """Process image through Ollama vision models."""
         try:
+            # Check if we're using a file path from extracted images
+            from pathlib import Path
+            
+            # If we're in path mode and the base64_encoded string looks like a file path
+            if self.image_mode == "path" and Path(base64_encoded).exists():
+                # Use the file path directly
+                images = [base64_encoded]
+            else:
+                # Use the base64 encoded image
+                images = [base64_encoded]
+                
             if self.enable_concurrency:
                 response = await self.aclient.chat(
                     model=self.model_name,
@@ -408,7 +425,7 @@ class LLM:
                         {
                             "role": "user",
                             "content": prompt,
-                            "images": [base64_encoded],
+                            "images": images,
                         }
                     ],
                     options={
@@ -426,7 +443,7 @@ class LLM:
                         {
                             "role": "user",
                             "content": prompt,
-                            "images": [base64_encoded],
+                            "images": images,
                         }
                     ],
                     options={
